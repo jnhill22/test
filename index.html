@@ -1,10 +1,425 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+<meta charset="UTF-8">
+<title>PONG // ARCADE</title>
+<style>
+  :root {
+    --bg: #06080d;
+    --panel: #0d1117;
+    --line: #1c2330;
+    --phosphor: #58f0c2;
+    --phosphor-dim: #2a6e5c;
+    --amber: #ffb454;
+    --crimson: #ff5d6c;
+    --font-display: 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--phosphor);
+    font-family: var(--font-display);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .cabinet {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding: 28px 32px 24px;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    border-radius: 6px;
+    box-shadow:
+      0 0 0 1px rgba(88, 240, 194, 0.05),
+      0 30px 60px -20px rgba(0,0,0,0.8),
+      inset 0 0 40px rgba(88, 240, 194, 0.03);
+  }
+
+  .marquee {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
+    letter-spacing: 0.18em;
+  }
+
+  .marquee h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--phosphor);
+    text-shadow: 0 0 8px rgba(88, 240, 194, 0.5);
+  }
+
+  .marquee .tag {
+    font-size: 11px;
+    color: var(--phosphor-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .scoreboard {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--phosphor-dim);
+  }
+
+  .scoreboard .score-block { text-align: center; }
+  .scoreboard .score-block .label { font-size: 10px; opacity: 0.8; }
+  .scoreboard .score-block .value {
+    font-size: 36px;
+    color: var(--phosphor);
+    text-shadow: 0 0 10px rgba(88, 240, 194, 0.45);
+    line-height: 1;
+  }
+  .scoreboard .versus { font-size: 16px; color: var(--line); }
+
+  canvas {
+    background: #03050a;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  .deck {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    font-size: 11px;
+    color: var(--phosphor-dim);
+    letter-spacing: 0.06em;
+  }
+
+  .deck .keys kbd {
+    background: #11161f;
+    border: 1px solid var(--line);
+    border-bottom: 2px solid var(--line);
+    color: var(--amber);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 11px;
+  }
+
+  button#reset {
+    background: transparent;
+    border: 1px solid var(--phosphor-dim);
+    color: var(--phosphor);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding: 6px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  button#reset:hover {
+    background: var(--phosphor);
+    color: #03050a;
+  }
+
+  .status {
+    height: 16px;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--amber);
+    text-align: center;
+  }
+</style>
 </head>
 <body>
-    
+
+<div class="cabinet">
+  <div class="marquee">
+    <h1>PONG</h1>
+    <span class="tag">PLAYER vs CPU</span>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score-block">
+      <div class="label">YOU</div>
+      <div class="value" id="scoreLeft">0</div>
+    </div>
+    <div class="versus">·</div>
+    <div class="score-block">
+      <div class="label">CPU</div>
+      <div class="value" id="scoreRight">0</div>
+    </div>
+  </div>
+
+  <canvas id="game" width="640" height="420"></canvas>
+
+  <div class="status" id="status">FIRST TO 7 WINS — CLICK TO START</div>
+
+  <div class="deck">
+    <div class="keys">
+      <kbd>W</kbd> / <kbd>↑</kbd> up &nbsp; <kbd>S</kbd> / <kbd>↓</kbd> down &nbsp; or move mouse
+    </div>
+    <button id="reset">RESTART</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const scoreLeftEl = document.getElementById('scoreLeft');
+  const scoreRightEl = document.getElementById('scoreRight');
+  const statusEl = document.getElementById('status');
+  const resetBtn = document.getElementById('reset');
+
+  const PADDLE_W = 10, PADDLE_H = 70;
+  const BALL_SIZE = 9;
+  const WIN_SCORE = 7;
+
+  let player = { x: 24, y: H/2 - PADDLE_H/2, w: PADDLE_W, h: PADDLE_H, speed: 6.2 };
+  let cpu    = { x: W - 24 - PADDLE_W, y: H/2 - PADDLE_H/2, w: PADDLE_W, h: PADDLE_H, speed: 4.6 };
+  let ball   = { x: W/2, y: H/2, vx: 0, vy: 0, size: BALL_SIZE };
+
+  let scoreLeft = 0, scoreRight = 0;
+  let running = false;
+  let gameOver = false;
+  let keys = { up: false, down: false };
+  let particles = [];
+
+  function resetBall(direction) {
+    ball.x = W / 2;
+    ball.y = H / 2;
+    const angle = (Math.random() * 0.6 - 0.3); // slight random angle
+    const speed = 5.2;
+    ball.vx = Math.cos(angle) * speed * direction;
+    ball.vy = Math.sin(angle) * speed;
+  }
+
+  function resetGame() {
+    scoreLeft = 0;
+    scoreRight = 0;
+    gameOver = false;
+    player.y = H/2 - PADDLE_H/2;
+    cpu.y = H/2 - PADDLE_H/2;
+    scoreLeftEl.textContent = scoreLeft;
+    scoreRightEl.textContent = scoreRight;
+    statusEl.textContent = 'FIRST TO 7 WINS — CLICK TO START';
+    running = false;
+    resetBall(Math.random() < 0.5 ? 1 : -1);
+  }
+
+  function spawnParticles(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6,
+        life: 24,
+        color
+      });
+    }
+  }
+
+  function updateParticles() {
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 1;
+    });
+    particles = particles.filter(p => p.life > 0);
+  }
+
+  function drawParticles() {
+    particles.forEach(p => {
+      ctx.globalAlpha = Math.max(p.life / 24, 0);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // --- Input ---
+  let mouseY = null;
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseY = (e.clientY - rect.top) * (H / rect.height);
+  });
+
+  canvas.addEventListener('click', () => {
+    if (!running && !gameOver) {
+      running = true;
+      statusEl.textContent = '';
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keys.up = true;
+    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.down = true;
+    if (e.key === ' ' && !running && !gameOver) {
+      running = true;
+      statusEl.textContent = '';
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keys.up = false;
+    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.down = false;
+  });
+
+  resetBtn.addEventListener('click', resetGame);
+
+  // --- Game logic ---
+  function updatePlayer() {
+    if (mouseY !== null) {
+      const targetY = mouseY - player.h / 2;
+      player.y += (targetY - player.y) * 0.35;
+    }
+    if (keys.up) player.y -= player.speed;
+    if (keys.down) player.y += player.speed;
+    player.y = Math.max(0, Math.min(H - player.h, player.y));
+  }
+
+  function updateCpu() {
+    // CPU tracks the ball with limited speed and a touch of imperfection
+    const center = cpu.y + cpu.h / 2;
+    const target = ball.y + (Math.random() - 0.5) * 18;
+    const diff = target - center;
+    const dz = 10;
+    if (Math.abs(diff) > dz) {
+      cpu.y += Math.sign(diff) * cpu.speed;
+    }
+    cpu.y = Math.max(0, Math.min(H - cpu.h, cpu.y));
+  }
+
+  function updateBall() {
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // top/bottom walls
+    if (ball.y - ball.size/2 <= 0) {
+      ball.y = ball.size/2;
+      ball.vy *= -1;
+    } else if (ball.y + ball.size/2 >= H) {
+      ball.y = H - ball.size/2;
+      ball.vy *= -1;
+    }
+
+    // player paddle collision
+    if (ball.vx < 0 &&
+        ball.x - ball.size/2 <= player.x + player.w &&
+        ball.x - ball.size/2 >= player.x &&
+        ball.y >= player.y && ball.y <= player.y + player.h) {
+      ball.x = player.x + player.w + ball.size/2;
+      const hitPos = (ball.y - (player.y + player.h/2)) / (player.h/2);
+      ball.vy = hitPos * 6;
+      ball.vx = Math.abs(ball.vx) * 1.05;
+      spawnParticles(ball.x, ball.y, '#58f0c2');
+    }
+
+    // cpu paddle collision
+    if (ball.vx > 0 &&
+        ball.x + ball.size/2 >= cpu.x &&
+        ball.x + ball.size/2 <= cpu.x + cpu.w &&
+        ball.y >= cpu.y && ball.y <= cpu.y + cpu.h) {
+      ball.x = cpu.x - ball.size/2;
+      const hitPos = (ball.y - (cpu.y + cpu.h/2)) / (cpu.h/2);
+      ball.vy = hitPos * 6;
+      ball.vx = -Math.abs(ball.vx) * 1.05;
+      spawnParticles(ball.x, ball.y, '#ffb454');
+    }
+
+    // scoring
+    if (ball.x < -20) {
+      scoreRight += 1;
+      scoreRightEl.textContent = scoreRight;
+      checkWin();
+      if (!gameOver) { running = false; resetBall(1); statusEl.textContent = 'CPU SCORES — CLICK TO CONTINUE'; }
+    } else if (ball.x > W + 20) {
+      scoreLeft += 1;
+      scoreLeftEl.textContent = scoreLeft;
+      checkWin();
+      if (!gameOver) { running = false; resetBall(-1); statusEl.textContent = 'YOU SCORE — CLICK TO CONTINUE'; }
+    }
+  }
+
+  function checkWin() {
+    if (scoreLeft >= WIN_SCORE) {
+      gameOver = true;
+      running = false;
+      statusEl.textContent = 'YOU WIN — RESTART TO PLAY AGAIN';
+    } else if (scoreRight >= WIN_SCORE) {
+      gameOver = true;
+      running = false;
+      statusEl.textContent = 'CPU WINS — RESTART TO PLAY AGAIN';
+    }
+  }
+
+  function drawCourt() {
+    ctx.fillStyle = '#03050a';
+    ctx.fillRect(0, 0, W, H);
+
+    // center dashed line
+    ctx.strokeStyle = '#1c2330';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 10]);
+    ctx.beginPath();
+    ctx.moveTo(W/2, 0);
+    ctx.lineTo(W/2, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawPaddle(p, color) {
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.shadowBlur = 0;
+  }
+
+  function drawBall() {
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(ball.x - ball.size/2, ball.y - ball.size/2, ball.size, ball.size);
+    ctx.shadowBlur = 0;
+  }
+
+  function loop() {
+    if (running && !gameOver) {
+      updatePlayer();
+      updateCpu();
+      updateBall();
+    } else if (!gameOver) {
+      updatePlayer();
+    }
+    updateParticles();
+
+    drawCourt();
+    drawPaddle(player, '#58f0c2');
+    drawPaddle(cpu, '#ffb454');
+    drawBall();
+    drawParticles();
+
+    requestAnimationFrame(loop);
+  }
+
+  resetBall(Math.random() < 0.5 ? 1 : -1);
+  loop();
+})();
+</script>
+
 </body>
 </html>
